@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from .vfe_template import VFETemplate
 
 
@@ -49,7 +50,7 @@ class PFNLayer(nn.Module):
 
 
 class PillarVFE(VFETemplate):
-    def __init__(self, model_cfg, num_point_features, voxel_size, point_cloud_range):
+    def __init__(self, model_cfg, num_point_features, voxel_size, point_cloud_range, **kwargs):
         super().__init__(model_cfg=model_cfg)
 
         self.use_norm = self.model_cfg.USE_NORM

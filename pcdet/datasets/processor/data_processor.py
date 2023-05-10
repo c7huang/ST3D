@@ -172,6 +172,38 @@ class DataProcessor(object):
         data_dict['points'] = points[choice]
         return data_dict
 
+    ############################################################################
+    # Modifications for cross-dataset domain adaptation
+    ############################################################################
+    def translate_points_and_boxes(self, data_dict=None, config=None):
+        if data_dict is None:
+            self.global_translation = config['TRANSLATION']
+            return self.translate_points_and_boxes
+        points = data_dict['points']
+        gt_boxes = data_dict['gt_boxes']
+        points[:,:3] += self.global_translation
+        gt_boxes[:,:3] += self.global_translation
+        data_dict['points'] = points
+        data_dict['gt_boxes'] = gt_boxes
+        return data_dict
+
+    def scale_features_minmax(self, data_dict=None, config=None):
+        if data_dict is None:
+            self.features_source_range = config['SOURCE_RANGE']
+            self.features_target_range = config['TARGET_RANGE']
+            return self.scale_features_minmax
+        sr = self.features_source_range
+        ss = sr[1] - sr[0]
+        tr = self.features_target_range
+        ts = tr[1] - tr[0]
+        points = data_dict['points']
+        feats = points[:,3]
+        feats = (feats - sr[0]) / ss
+        feats = feats * ts + tr[0]
+        points[:,3] = feats
+        data_dict['points'] = points
+        return data_dict
+
     def forward(self, data_dict):
         """
         Args:

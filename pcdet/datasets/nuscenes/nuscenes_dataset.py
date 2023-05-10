@@ -73,15 +73,14 @@ class NuScenesDataset(DatasetTemplate):
 
         return sampled_infos
 
-    @staticmethod
-    def remove_ego_points(points, center_radius=1.0):
-        mask = ~((np.abs(points[:, 0]) < center_radius) & (np.abs(points[:, 1]) < center_radius))
-        return points[mask]
-
     def get_sweep(self, sweep_info):
+        def remove_ego_points(points, center_radius=1.0):
+            mask = ~((np.abs(points[:, 0]) < center_radius) & (np.abs(points[:, 1]) < center_radius))
+            return points[mask]
+
         lidar_path = self.root_path / sweep_info['lidar_path']
         points_sweep = np.fromfile(str(lidar_path), dtype=np.float32, count=-1).reshape([-1, 5])[:, :4]
-        points_sweep = self.remove_ego_points(points_sweep).T
+        points_sweep = remove_ego_points(points_sweep).T
         if sweep_info['transform_matrix'] is not None:
             num_points = points_sweep.shape[1]
             points_sweep[:3, :] = sweep_info['transform_matrix'].dot(
@@ -94,7 +93,7 @@ class NuScenesDataset(DatasetTemplate):
         info = self.infos[index]
         lidar_path = self.root_path / info['lidar_path']
         points = np.fromfile(str(lidar_path), dtype=np.float32, count=-1).reshape([-1, 5])[:, :4]
-        points = self.remove_ego_points(points, center_radius=1.5)
+
         sweep_points_list = [points]
         sweep_times_list = [np.zeros((points.shape[0], 1))]
 
@@ -141,7 +140,6 @@ class NuScenesDataset(DatasetTemplate):
                 'gt_names': info['gt_names'] if mask is None else info['gt_names'][mask],
                 'gt_boxes': info['gt_boxes'] if mask is None else info['gt_boxes'][mask]
             })
-
             if self.dataset_cfg.get('SHIFT_COOR', None):
                 input_dict['gt_boxes'][:, 0:3] += self.dataset_cfg.SHIFT_COOR
 
@@ -180,125 +178,7 @@ class NuScenesDataset(DatasetTemplate):
 
         return data_dict
 
-    def generate_prediction_dicts(self, batch_dict, pred_dicts, class_names, output_path=None):
-        """
-        Args:
-            batch_dict:
-                frame_id:
-            pred_dicts: list of pred_dicts
-                pred_boxes: (N, 7), Tensor
-                pred_scores: (N), Tensor
-                pred_labels: (N), Tensor
-            class_names:
-            output_path:
-        Returns:
-        """
-        def get_template_prediction(num_samples):
-            ret_dict = {
-                'name': np.zeros(num_samples), 'score': np.zeros(num_samples),
-                'boxes_lidar': np.zeros([num_samples, 7]), 'pred_labels': np.zeros(num_samples)
-            }
-            return ret_dict
-
-        def generate_single_sample_dict(box_dict):
-            pred_scores = box_dict['pred_scores'].cpu().numpy()
-            pred_boxes = box_dict['pred_boxes'].cpu().numpy()
-            pred_labels = box_dict['pred_labels'].cpu().numpy()
-            pred_dict = get_template_prediction(pred_scores.shape[0])
-            if pred_scores.shape[0] == 0:
-                return pred_dict
-
-            if self.dataset_cfg.get('SHIFT_COOR', None):
-                pred_boxes[:, 0:3] -= self.dataset_cfg.SHIFT_COOR
-
-            pred_dict['name'] = np.array(class_names)[pred_labels - 1]
-            pred_dict['score'] = pred_scores
-            pred_dict['boxes_lidar'] = pred_boxes
-            pred_dict['pred_labels'] = pred_labels
-
-            return pred_dict
-
-        annos = []
-        for index, box_dict in enumerate(pred_dicts):
-            single_pred_dict = generate_single_sample_dict(box_dict)
-            single_pred_dict['frame_id'] = batch_dict['frame_id'][index]
-            single_pred_dict['metadata'] = batch_dict['metadata'][index]
-            annos.append(single_pred_dict)
-
-        return annos
-
-    def kitti_eval(self, eval_det_annos, eval_gt_annos, class_names):
-        from ..kitti.kitti_object_eval_python import eval as kitti_eval
-
-        map_name_to_kitti = {
-            'car': 'Car',
-            'pedestrian': 'Pedestrian',
-            'truck': 'Truck',
-        }
-
-        def transform_to_kitti_format(annos, info_with_fakelidar=False, is_gt=False):
-            for anno in annos:
-                if 'name' not in anno:
-                    anno['name'] = anno['gt_names']
-                    anno.pop('gt_names')
-
-                for k in range(anno['name'].shape[0]):
-                    if anno['name'][k] in map_name_to_kitti:
-                        anno['name'][k] = map_name_to_kitti[anno['name'][k]]
-                    else:
-                        anno['name'][k] = 'Person_sitting'
-
-                if 'boxes_lidar' in anno:
-                    gt_boxes_lidar = anno['boxes_lidar'].copy()
-                else:
-                    gt_boxes_lidar = anno['gt_boxes'].copy()
-
-                # filter by fov
-                if is_gt and self.dataset_cfg.get('GT_FILTER', None):
-                    if self.dataset_cfg.GT_FILTER.get('FOV_FILTER', None):
-                        fov_gt_flag = self.extract_fov_gt(
-                            gt_boxes_lidar, self.dataset_cfg['FOV_DEGREE'], self.dataset_cfg['FOV_ANGLE']
-                        )
-                        gt_boxes_lidar = gt_boxes_lidar[fov_gt_flag]
-                        anno['name'] = anno['name'][fov_gt_flag]
-
-                anno['bbox'] = np.zeros((len(anno['name']), 4))
-                anno['bbox'][:, 2:4] = 50  # [0, 0, 50, 50]
-                anno['truncated'] = np.zeros(len(anno['name']))
-                anno['occluded'] = np.zeros(len(anno['name']))
-
-                if len(gt_boxes_lidar) > 0:
-                    if info_with_fakelidar:
-                        gt_boxes_lidar = box_utils.boxes3d_kitti_fakelidar_to_lidar(gt_boxes_lidar)
-
-                    gt_boxes_lidar[:, 2] -= gt_boxes_lidar[:, 5] / 2
-                    anno['location'] = np.zeros((gt_boxes_lidar.shape[0], 3))
-                    anno['location'][:, 0] = -gt_boxes_lidar[:, 1]  # x = -y_lidar
-                    anno['location'][:, 1] = -gt_boxes_lidar[:, 2]  # y = -z_lidar
-                    anno['location'][:, 2] = gt_boxes_lidar[:, 0]  # z = x_lidar
-                    dxdydz = gt_boxes_lidar[:, 3:6]
-                    anno['dimensions'] = dxdydz[:, [0, 2, 1]]  # lwh ==> lhw
-                    anno['rotation_y'] = -gt_boxes_lidar[:, 6] - np.pi / 2.0
-                    anno['alpha'] = -np.arctan2(-gt_boxes_lidar[:, 1], gt_boxes_lidar[:, 0]) + anno['rotation_y']
-                else:
-                    anno['location'] = anno['dimensions'] = np.zeros((0, 3))
-                    anno['rotation_y'] = anno['alpha'] = np.zeros(0)
-
-        transform_to_kitti_format(eval_det_annos)
-        transform_to_kitti_format(eval_gt_annos, info_with_fakelidar=False, is_gt=True)
-
-        kitti_class_names = []
-        for x in class_names:
-            if x in map_name_to_kitti:
-                kitti_class_names.append(map_name_to_kitti[x])
-            else:
-                kitti_class_names.append('Person_sitting')
-        ap_result_str, ap_dict = kitti_eval.get_official_eval_result(
-            gt_annos=eval_gt_annos, dt_annos=eval_det_annos, current_classes=kitti_class_names
-        )
-        return ap_result_str, ap_dict
-
-    def nuscene_eval(self, det_annos, class_names, **kwargs):
+    def evaluation(self, det_annos, class_names, **kwargs):
         import json
         from nuscenes.nuscenes import NuScenes
         from . import nuscenes_utils
@@ -338,11 +218,12 @@ class NuScenesDataset(DatasetTemplate):
             eval_version = 'cvpr_2019'
             eval_config = config_factory(eval_version)
 
+        eval_set = self.dataset_cfg.get('EVAL_SET', eval_set_map[self.dataset_cfg.VERSION])
         nusc_eval = NuScenesEval(
             nusc,
             config=eval_config,
             result_path=res_path,
-            eval_set=eval_set_map[self.dataset_cfg.VERSION],
+            eval_set=eval_set,
             output_dir=str(output_path),
             verbose=True,
         )
@@ -352,18 +233,7 @@ class NuScenesDataset(DatasetTemplate):
             metrics = json.load(f)
 
         result_str, result_dict = nuscenes_utils.format_nuscene_results(metrics, self.class_names, version=eval_version)
-
         return result_str, result_dict
-
-    def evaluation(self, det_annos, class_names, **kwargs):
-        if kwargs['eval_metric'] == 'kitti':
-            eval_det_annos = copy.deepcopy(det_annos)
-            eval_gt_annos = copy.deepcopy(self.infos)
-            return self.kitti_eval(eval_det_annos, eval_gt_annos, class_names)
-        elif kwargs['eval_metric'] == 'nuscenes':
-            return self.nuscene_eval(det_annos, class_names, **kwargs)
-        else:
-            raise NotImplementedError
 
     def create_groundtruth_database(self, used_classes=None, max_sweeps=10):
         import torch
@@ -470,7 +340,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.func == 'create_nuscenes_infos':
-        dataset_cfg = EasyDict(yaml.load(open(args.cfg_file)))
+        dataset_cfg = EasyDict(yaml.safe_load(open(args.cfg_file)))
         ROOT_DIR = (Path(__file__).resolve().parent / '../../../').resolve()
         dataset_cfg.VERSION = args.version
         create_nuscenes_info(
