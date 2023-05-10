@@ -19,7 +19,7 @@ INFO_PATH: {
 
 POINT_CLOUD_RANGE: [-75.2, -75.2, -2, 75.2, 75.2, 4]
 MIN_POINTS_OF_GT: 1
-BALANCED_RESAMPLING: True 
+BALANCED_RESAMPLING: False 
 
 DATA_AUGMENTOR:
     DISABLE_AUG_LIST: ['random_object_scaling', 'random_object_rotation']
@@ -52,9 +52,6 @@ POINT_FEATURE_ENCODING: {
 
 
 DATA_PROCESSOR:
-    - NAME: translate_points_and_boxes
-      TRANSLATION: [0.0, 0.0, 1.8]
-
     - NAME: scale_features_minmax
       SOURCE_RANGE: [0, 255]
       TARGET_RANGE: [0, 1]
