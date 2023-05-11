@@ -1,14 +1,14 @@
-CLASS_NAMES: ['Vehicle']
+CLASS_NAMES: ['car']
 
 DATA_CONFIG:
-    _BASE_CONFIG_: cfgs/dataset_configs/da_waymo_nuscenes_dataset.yaml
+    _BASE_CONFIG_: cfgs/dataset_configs/da_nuscenes_waymo_dataset.yaml
+    SHIFT_COOR: [0.0, 0.0, 1.8]
 
 DATA_CONFIG_TAR:
-    _BASE_CONFIG_: cfgs/dataset_configs/da_nuscenes_dataset.yaml
+    _BASE_CONFIG_: cfgs/dataset_configs/da_waymo_dataset.yaml
+    CLASS_NAMES: ['Vehicle']
     TARGET: True
     USE_PSEUDO_LABEL: True
-    CLASS_NAMES: ['car']
-    SHIFT_COOR: [0.0, 0.0, 1.8]
 
 MODEL:
     NAME: CenterPoint
@@ -37,7 +37,7 @@ MODEL:
         CLASS_AGNOSTIC: False
 
         CLASS_NAMES_EACH_HEAD: [
-            ['Vehicle']
+            ['car']
         ]
 
         SHARED_CONV_CHANNEL: 64
@@ -67,18 +67,18 @@ MODEL:
 
         POST_PROCESSING:
             SCORE_THRESH: 0.1
-            POST_CENTER_LIMIT_RANGE: [-61.2, -61.2, -10.0, 61.2, 61.2, 10.0]
+            POST_CENTER_LIMIT_RANGE: [-85.2, -85.2, -10, 85.2, 85.2, 10.0]
             MAX_OBJ_PER_SAMPLE: 500
             NMS_CONFIG:
                 NMS_TYPE: nms_gpu
-                NMS_THRESH: 0.2
-                NMS_PRE_MAXSIZE: 1000
-                NMS_POST_MAXSIZE: 83
+                NMS_THRESH: 0.7
+                NMS_PRE_MAXSIZE: 4096
+                NMS_POST_MAXSIZE: 500
 
     POST_PROCESSING:
         RECALL_THRESH_LIST: [0.3, 0.5, 0.7]
 
-        EVAL_METRIC: kitti
+        EVAL_METRIC: waymo
 
 
 OPTIMIZATION:

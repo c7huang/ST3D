@@ -1,37 +1,34 @@
-DATASET: 'WaymoDataset'
-DATA_PATH: '../data/waymo'
-PROCESSED_DATA_TAG: 'waymo_processed_data_v0_5_0'
+DATASET: 'NuScenesDataset'
+DATA_PATH: '../data/nuscenes'
 
-POINT_CLOUD_RANGE: [-75.2, -75.2, -2, 75.2, 75.2, 4]
-MIN_POINTS_OF_GT: 1
+VERSION: 'v1.0-trainval'
+MAX_SWEEPS: 10
+PRED_VELOCITY: False
+SET_NAN_VELOCITY_TO_ZEROS: True
+FILTER_MIN_POINTS_IN_GT: 1
 
 DATA_SPLIT: {
     'train': train,
     'test': val
 }
 
-SAMPLED_INTERVAL: {
-    'train': 5,
-    'test': 1
+INFO_PATH: {
+    'train': [nuscenes_infos_10sweeps_train.pkl],
+    'test': [nuscenes_infos_10sweeps_val.pkl],
 }
 
-FILTER_EMPTY_BOXES_FOR_TRAIN: True
-DISABLE_NLZ_FLAG_ON_POINTS: True
-
-USE_SHARED_MEMORY: False  # it will load the data to shared memory to speed up (DO NOT USE IT IF YOU DO NOT FULLY UNDERSTAND WHAT WILL HAPPEN)
-SHARED_MEMORY_FILE_LIMIT: 35000  # set it based on the size of your shared memory
+POINT_CLOUD_RANGE: [-75.2, -75.2, -2, 75.2, 75.2, 4]
+MIN_POINTS_OF_GT: 1
+BALANCED_RESAMPLING: False 
 
 DATA_AUGMENTOR:
-    DISABLE_AUG_LIST: ['random_object_rotation', 'random_object_scaling', 'normalize_object_size']
+    DISABLE_AUG_LIST: ['random_object_scaling', 'random_object_rotation']
     AUG_CONFIG_LIST:
         - NAME: random_object_scaling
-          SCALE_UNIFORM_NOISE: [0.75, 0.95]
-
-        - NAME: normalize_object_size
-          SIZE_RES: [-0.91, -0.49, -0.26]
+          SCALE_UNIFORM_NOISE: [0.9, 1.1]
 
         - NAME: random_object_rotation
-          ROT_PROB: 1.0
+          ROT_PROB: 0.8
           ROT_UNIFORM_NOISE: [-0.78539816, 0.78539816]
 
         - NAME: random_world_flip
@@ -50,11 +47,15 @@ DATA_AUGMENTOR:
 POINT_FEATURE_ENCODING: {
     encoding_type: absolute_coordinates_encoding,
     used_feature_list: ['x', 'y', 'z', 'intensity'],
-    src_feature_list: ['x', 'y', 'z', 'intensity', 'elongation'],
+    src_feature_list: ['x', 'y', 'z', 'intensity', 'timestamp'],
 }
 
 
 DATA_PROCESSOR:
+    - NAME: scale_features_minmax
+      SOURCE_RANGE: [0, 255]
+      TARGET_RANGE: [0, 1]
+
     - NAME: mask_points_and_boxes_outside_range
       REMOVE_OUTSIDE_BOXES: True
 
